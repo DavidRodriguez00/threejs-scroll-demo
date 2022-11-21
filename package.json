@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/DavidRodriguez00/threejs-scroll-demo#readme",
   "dependencies": {
+    "gltfpack": "^0.18.0",
     "three": "^0.146.0",
     "vite": "^3.2.4"
   }
