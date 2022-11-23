@@ -4,7 +4,6 @@ import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 
-
 init();
 
 function init() {
@@ -23,9 +22,6 @@ function init() {
     });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    // renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    // renderer.toneMappingExposure = 1;
-    // renderer.outputEncoding = THREE.sRGBEncoding;
 
     render();
 
@@ -54,7 +50,6 @@ function init() {
 
         star.position.set(x, y, z);
         scene.add(star);
-
     }
     Array(3000).fill().forEach(addStar);
 
@@ -81,31 +76,11 @@ function init() {
         model.position.z = -150;
         model.rotation.y = 0.2;
         model.rotation.x = 0.8;
-        
-
-
 
         scene.add(model);
 
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.addEventListener('change', render); // use if there is no animation loop
-        controls.minDistance = 400;
-        controls.maxDistance = 1000;
-        controls.update();
-
         render();
-
     });
-
-
-    // Avatar
-    // const avatarTexture = new THREE.TextureLoader().load('assets/images/jeff.png');
-    // const avatar = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 3), new THREE.MeshBasicMaterial({ map: avatarTexture }));
-
-    // scene.add(avatar);
-
-    // avatar.position.z = -5;
-    // avatar.position.x = 2;
 
 
     // Tierra
@@ -149,9 +124,6 @@ function init() {
         tierra.rotation.x += 0.0008;
         tierra.rotation.y += 0.0025;
 
-        // avatar.rotation.y += 0.1;
-        // avatar.rotation.z += 0.1;
-
         camera.position.z = t * -0.01;
         camera.position.x = t * -0.0002;
         camera.rotation.y = t * -0.0002;
@@ -179,9 +151,11 @@ function init() {
 
     window.addEventListener('resize', onWindowResize);
 
+
     function render() {
         renderer.render(scene, camera);
     }
+
 
     function onWindowResize() {
 
