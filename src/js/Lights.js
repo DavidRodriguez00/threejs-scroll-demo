@@ -1,107 +1,166 @@
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 
-// Inicialización de la librería para luces de área (reflejos físicos PBR)
-try {
-    RectAreaLightUniformsLib.init();
-} catch (e) {
-    console.warn("RectAreaLightUniformsLib ya estaba inicializada o falló.");
-}
+RectAreaLightUniformsLib.init();
 
-/**
- * Clase Lights: Motor de iluminación física e hiperrealista.
- */
 export class Lights {
-    constructor(scene, cockpitGroup) {
-        if (!scene || !cockpitGroup) {
-            console.error("Lights requiere 'scene' y 'cockpitGroup' válidos.");
-            return;
+    constructor(scene, cockpitGroup, config = {}) {
+        if (!scene || !cockpitGroup) throw new Error("Lights requiere 'scene' y 'cockpitGroup'.");
+
+        this.scene = scene;
+        this.cockpitGroup = cockpitGroup;
+
+        this.cfg = {
+            sunIntensity: 4.5,
+            ambientIntensity: 0.4,
+            maxFlyByLights: 3, // Máximo de disparos iluminando simultáneamente
+            ...config
+        };
+
+        this._time = 0;
+        this.flyByLights = []; // Pool de luces para disparos externos
+
+        this._initLights();
+    }
+
+    _initLights() {
+        this._createSun();
+        this._createAmbient();
+        this._createCockpitLights();
+        this._createEffects();
+        this._createFlyByPool(); // Inicializar luces de ráfaga
+    }
+
+    // --- NUEVO: POOL DE LUCES PARA DISPAROS EXTERNOS ---
+    _createFlyByPool() {
+        for (let i = 0; i < this.cfg.maxFlyByLights; i++) {
+            const light = new THREE.PointLight(0x00ff00, 0, 30, 2);
+            // Las posicionamos detrás de la cabina inicialmente
+            light.position.set(0, 0, 0);
+            this.cockpitGroup.add(light);
+
+            this.flyByLights.push({
+                light: light,
+                active: false,
+                speed: 0,
+                color: new THREE.Color()
+            });
         }
-
-        // --- 1. EL SOL (Luz Direccional Cruda) ---
-        this.sun = new THREE.DirectionalLight(0xffffff, 4);
-        this.sun.position.set(1200, 1600, 1000);
-        this.sun.castShadow = true;
-        this.sun.shadow.mapSize.set(4096, 4096);
-        this.sun.shadow.camera.near = 10;
-        this.sun.shadow.camera.far = 10000;
-        this.sun.shadow.bias = -0.00002;
-        this.sun.shadow.normalBias = 0.02;
-        scene.add(this.sun);
-
-        // --- 2. LUZ AMBIENTAL (Radiación de Fondo) ---
-        this.ambient = new THREE.HemisphereLight(0x050508, 0x000000, 0.2);
-        scene.add(this.ambient);
-
-        // --- 3. REBOTE INTERIOR (Indirect Lighting) ---
-        this.bounceLight = new THREE.PointLight(0xffffff, 0.4, 8);
-        this.bounceLight.position.set(0, -1, -0.5);
-        cockpitGroup.add(this.bounceLight);
-
-        // --- 4. REFLEJOS ÓPTICOS EN EL CRISTAL ---
-        this.lensGlintL = new THREE.PointLight(0xffffff, 0, 4);
-        this.lensGlintR = new THREE.PointLight(0xffffff, 0, 4);
-        this.lensGlintL.position.set(-1.8, 2.2, 1.0);
-        this.lensGlintR.position.set(1.8, 2.2, 1.0);
-        cockpitGroup.add(this.lensGlintL, this.lensGlintR);
-
-        // --- 5. FLASH DE DISPARO (Efecto Xenón / Flash de Móvil) ---
-        this.combatFlash = new THREE.PointLight(0xeef5ff, 0, 60);
-        this.combatFlash.position.set(0, 1.8, 1.5);
-        cockpitGroup.add(this.combatFlash);
-
-        // --- 6. INSTRUMENTACIÓN FÍSICA ---
-        this.hudAccent = new THREE.PointLight(0x00ffff, 0.15, 2);
-        this.hudAccent.position.set(0, -0.5, 0.8);
-        cockpitGroup.add(this.hudAccent);
-
-        // --- 7. ALARMAS DE ESTRÉS ESTRUCTURAL ---
-        this.alarmLeft = new THREE.PointLight(0xff1100, 0, 12);
-        this.alarmRight = new THREE.PointLight(0xff1100, 0, 12);
-        this.alarmLeft.position.set(-2.8, 0.8, 1.5);
-        this.alarmRight.position.set(2.8, 0.8, 1.5);
-        cockpitGroup.add(this.alarmLeft, this.alarmRight);
-
-        this._lastTime = 0;
     }
 
     /**
-     * Dispara un destello de luz crudo.
+     * Activa una luz que recorre la cabina de atrás hacia adelante
+     * @param {number} color - Hexadecimal (0x00ff00 verde, 0x00aaff azul)
      */
-    triggerCombatFlash(color = 0xffffff, power = 40.0) {
-        if (!this.combatFlash) return;
+    triggerFlyBy(color = 0x00ff00) {
+        const fbl = this.flyByLights.find(l => !l.active);
+        if (!fbl) return;
+
+        fbl.active = true;
+        fbl.light.color.setHex(color);
+        fbl.light.intensity = 40 + Math.random() * 40; // Destello HDR
+
+        // Aparece detrás en una posición X/Y aleatoria cerca del fuselaje
+        fbl.light.position.set(
+            (Math.random() - 0.5) * 10,
+            (Math.random() - 0.5) * 8,
+            -10
+        );
+        fbl.speed = 100 + Math.random() * 50; // Velocidad del proyectil
+    }
+
+    // --- MÉTODOS EXISTENTES (Actualizados) ---
+
+    _createSun() {
+        this.sun = new THREE.DirectionalLight(0xffffff, this.cfg.sunIntensity);
+        this.sun.position.set(1200, 1600, 1000);
+        this.sun.castShadow = true;
+        this.sun.shadow.mapSize.set(2048, 2048); // Balance rendimiento/calidad
+        this.scene.add(this.sun);
+    }
+
+    _createAmbient() {
+        this.ambient = new THREE.HemisphereLight(0x0a0a15, 0x000000, this.cfg.ambientIntensity);
+        this.scene.add(this.ambient);
+    }
+
+    _createCockpitLights() {
+        this.bounceLight = new THREE.PointLight(0x44aaff, 0.6, 10);
+        this.bounceLight.position.set(0, -0.8, -0.2);
+
+        this.engineGlow = new THREE.PointLight(0x0088ff, 0, 15);
+        this.engineGlow.position.set(0, 0, -3);
+
+        this.alarmLeft = new THREE.PointLight(0xff0000, 0, 15);
+        this.alarmRight = new THREE.PointLight(0xff0000, 0, 15);
+        this.alarmLeft.position.set(-3, 1, 1);
+        this.alarmRight.position.set(3, 1, 1);
+
+        this.cockpitGroup.add(this.bounceLight, this.engineGlow, this.alarmLeft, this.alarmRight);
+    }
+
+    _createEffects() {
+        this.combatFlash = new THREE.PointLight(0xffffff, 0, 100);
+        this.combatFlash.position.set(0, 1.5, 2.0);
+        this.shortCircuit = new THREE.PointLight(0xffffff, 0, 8);
+        this.cockpitGroup.add(this.combatFlash, this.shortCircuit);
+    }
+
+    triggerCombatFlash(color = 0xffffff, power = 60) {
         this.combatFlash.color.setHex(color);
         this.combatFlash.intensity = power;
     }
 
-    /**
-     * Actualiza la dinámica de luces.
-     */
-    update(time, speed) {
-        const delta = time - this._lastTime;
-        this._lastTime = time;
+    update(delta, speed) {
+        this._time += delta;
 
-        if (this.combatFlash && this.combatFlash.intensity > 0) {
-            this.combatFlash.intensity *= Math.pow(0.001, delta);
-            if (this.combatFlash.intensity < 0.1) this.combatFlash.intensity = 0;
-        }
+        // Generamos valores de oscilación sutil
+        // Usamos frecuencias distintas (0.8 y 0.5) para que el movimiento sea irregular (natural)
+        this.oscillation = {
+            x: Math.sin(this._time * 0.8) * 0.015,
+            y: Math.cos(this._time * 0.5) * 0.015,
+            roll: Math.sin(this._time * 0.3) * 0.005
+        };
 
-        const glintWave = Math.sin(time * 0.2);
-        const glintBase = 0.05 + (glintWave > 0.8 ? (glintWave - 0.8) * 2 : 0);
-        this.lensGlintL.intensity = glintBase + (Math.random() * 0.02);
-        this.lensGlintR.intensity = glintBase + (Math.random() * 0.02);
+        this._updateCombatFlash(delta);
+        this._updateEngine(speed);
+        this._updateState(speed);
+        this._updateFlyBy(delta); // Actualizar los disparos que pasan
+    }
 
-        if (speed > 18) {
-            const strobe = Math.sin(time * 40) > 0.8 ? 1 : 0;
-            this.alarmLeft.intensity = strobe * (speed * 0.5);
-            this.alarmRight.intensity = strobe * (speed * 0.5);
-            this.bounceLight.intensity = 0.4 + (Math.random() * 0.3);
-            this.hudAccent.intensity = 0.3 + (Math.random() * 0.5);
-        } else {
-            this.alarmLeft.intensity = THREE.MathUtils.lerp(this.alarmLeft.intensity, 0, 0.1);
-            this.alarmRight.intensity = THREE.MathUtils.lerp(this.alarmRight.intensity, 0, 0.1);
-            this.bounceLight.intensity = 0.4;
-            this.hudAccent.intensity = 0.15;
-        }
+    _updateFlyBy(delta) {
+        this.flyByLights.forEach(fbl => {
+            if (!fbl.active) return;
+
+            // Mover la luz de atrás hacia adelante (Z aumenta)
+            fbl.light.position.z += fbl.speed * delta;
+
+            // Decaimiento natural de intensidad
+            fbl.light.intensity *= 0.92;
+
+            // Desactivar cuando ya pasó la cabina o se apagó
+            if (fbl.light.position.z > 15 || fbl.light.intensity < 0.1) {
+                fbl.active = false;
+                fbl.light.intensity = 0;
+            }
+        });
+    }
+
+    _updateCombatFlash(delta) {
+        if (this.combatFlash.intensity <= 0) return;
+        this.combatFlash.intensity *= Math.exp(-12 * delta);
+        if (this.combatFlash.intensity < 0.05) this.combatFlash.intensity = 0;
+    }
+
+    _updateEngine(speed) {
+        const target = speed > 10 ? (speed - 10) * 2 : 0.5;
+        this.engineGlow.intensity = THREE.MathUtils.lerp(this.engineGlow.intensity, target, 0.1);
+    }
+
+    _updateState(speed) {
+        // Lógica de alarmas simplificada para enfoque en disparos
+        const inCombat = speed > 18;
+        this.alarmLeft.intensity = THREE.MathUtils.lerp(this.alarmLeft.intensity, inCombat ? 5 : 0, 0.1);
+        this.alarmRight.intensity = THREE.MathUtils.lerp(this.alarmRight.intensity, inCombat ? 5 : 0, 0.1);
     }
 }
