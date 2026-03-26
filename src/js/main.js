@@ -1,169 +1,160 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
-import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { SceneManager } from './SceneManager.js';
+import { Starfield } from './Starfield.js';
+import { Models } from './Models.js';
+import { Lights } from './Lights.js';
 
+// 1. INICIALIZACIÓN DEL NÚCLEO
+const canvas = document.querySelector('#bg');
+const sm = new SceneManager(canvas);
+const stars = new Starfield(sm.scene);
+const models = new Models();
+const lights = new Lights(sm.scene, sm.cockpitGroup);
 
-init();
+// 2. ESTADO GLOBAL DE LA SIMULACIÓN
+const state = { 
+    mouse: new THREE.Vector2(),        
+    smoothMouse: new THREE.Vector2(),  
+    speed: 1.0,                        
+    targetSpeed: 5.0,                  
+    isLoaded: false,
+    lastFireTime: 0,
+    lastPlayerFireTime: 0,
+    isMouseDown: false 
+};
 
-function init() {
-
-    // Setup
-    const scene = new THREE.Scene();
-
-    const camera = new THREE.PerspectiveCamera(80, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.setZ(30);
-    camera.position.setX(-3);
-
-    const renderer = new THREE.WebGLRenderer({
-        canvas: document.querySelector('#bg'),
-        antialias: true,
-        alpha: true
-    });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-
-    render();
-
-
-    // Lights
-    const pointLight = new THREE.PointLight(0xffffff);
-    pointLight.position.set(1000, 500, 500);
-
-    const pointLight2 = new THREE.PointLight(0xffffff);
-    pointLight2.position.set(100, 50, 50);
-
-    const ambientLight = new THREE.AmbientLight(0xFDECD2);
-    scene.add(pointLight, pointLight2, ambientLight);
-
-
-    // Stars
-    function addStar() {
-        const geometry = new THREE.SphereGeometry(0.06, 24, 24);
-        const material = new THREE.MeshStandardMaterial({ color: 0xffffff });
-
-        const star = new THREE.Mesh(geometry, material);
-
-        let [x, y, z] = Array(3)
-            .fill()
-            .map(() => THREE.MathUtils.randFloatSpread(190));
-
-        star.position.set(x, y, z);
-        scene.add(star);
+/**
+ * SECUENCIA DE INICIO (CARGA DINÁMICA)
+ */
+(async () => {
+    try {
+        console.log("🚀 Iniciando secuencia de pre-vuelo...");
+        
+        // Inicializamos el sistema de partículas láser en la escena
+        models.initLasers(sm.scene);
+        
+        // Carga de activos en paralelo para optimizar tiempos
+        await models.loadShip(sm.cockpitGroup);
+        await Promise.all([
+            models.loadDeathStar(sm.scene),
+            models.loadEscorts(5) 
+        ]);
+        
+        state.isLoaded = true;
+        document.body.classList.add('loaded'); 
+        console.log("✅ Sistemas de Combate: Online");
+    } catch (err) {
+        console.error("❌ Fallo crítico en el despliegue:", err);
     }
-    Array(3000).fill().forEach(addStar);
+})();
 
+/**
+ * GESTIÓN DE ENTRADA (INPUT)
+ */
+window.addEventListener('mousemove', (e) => {
+    state.mouse.x = (e.clientX / window.innerWidth) - 0.5;
+    state.mouse.y = (e.clientY / window.innerHeight) - 0.5;
+}, { passive: true });
 
-    // Model
-    const container = document.createElement('div');
-    document.body.appendChild(container);
+// Turbo y control de disparo continuo
+window.addEventListener('mousedown', () => {
+    state.targetSpeed = 25.0; 
+    state.isMouseDown = true;
+});
 
-    container.appendChild(renderer.domElement);
+window.addEventListener('mouseup', () => {
+    state.targetSpeed = 5.0;
+    state.isMouseDown = false;
+});
 
-    const ktx2Loader = new KTX2Loader()
-        .setTranscoderPath('js/libs/basis/')
-        .detectSupport(renderer);
+/**
+ * LOOP DE ACTUALIZACIÓN PRINCIPAL
+ */
+sm.onUpdate((time, delta, camera) => {
+    
+    // 1. FÍSICA VISUAL E INERCIA
+    state.speed = THREE.MathUtils.lerp(state.speed, state.targetSpeed, 0.05);
+    state.smoothMouse.lerp(state.mouse, 0.07);
 
-    const loader = new GLTFLoader().setPath('assets/models/');
-    loader.setKTX2Loader(ktx2Loader);
-    loader.setMeshoptDecoder(MeshoptDecoder);
-    loader.load('aeronave.glb', function (gltf) {
+    if (state.isLoaded) {
+        
+        // 2. PARALAJE Y POSICIONAMIENTO DEL ESCENARIO
+        const zBase = 1800;
+        const speedOffset = state.speed * 20;
+        
+        const targetX = -state.smoothMouse.x * 700;
+        const targetY = state.smoothMouse.y * 400;
 
-        const model = gltf.scene;
-        model.scale.set(2.1, 2.1, 1.9);
-        model.position.x = -200;
-        model.position.y = -90;
-        model.position.z = -150;
-        model.rotation.y = 0.2;
-        model.rotation.x = 0.8;
+        models.targetGroup.position.x = THREE.MathUtils.lerp(models.targetGroup.position.x, targetX, 0.03);
+        models.targetGroup.position.y = THREE.MathUtils.lerp(models.targetGroup.position.y, targetY, 0.03);
+        models.targetGroup.position.z = -(zBase + speedOffset);
 
-        scene.add(model);
+        // 3. INERCIA ROTACIONAL DEL ENTORNO (Tilt)
+        const tiltX = state.smoothMouse.y * 0.12;
+        const tiltZ = -state.smoothMouse.x * 0.20;
+        models.targetGroup.rotation.x = THREE.MathUtils.lerp(models.targetGroup.rotation.x, tiltX, 0.02);
+        models.targetGroup.rotation.z = THREE.MathUtils.lerp(models.targetGroup.rotation.z, tiltZ, 0.02);
 
-        render();
-    });
+        if (models.deathStar) models.deathStar.rotation.y += 0.0002;
 
+        // 4. LÓGICA DE COMBATE
+        
+        // Disparo CONTINUO del Jugador (Verde)
+        if (state.isMouseDown && time - state.lastPlayerFireTime > 0.12) {
+            models.spawnPlayerLaser(sm.camera);
+            lights.triggerCombatFlash(0x00ff00); 
+            state.lastPlayerFireTime = time;
+        }
 
-    // Tierra
-    const TierraTexture = new THREE.TextureLoader().load('assets/images/tierra.jpeg');
-    const normalTierraTexture = new THREE.TextureLoader().load('assets/images/normal.jpg');
-    const tierra = new THREE.Mesh(
-        new THREE.SphereGeometry(17, 50, 50),
-        new THREE.MeshStandardMaterial({
-            map: TierraTexture,
-            normalMap: normalTierraTexture,
-        })
-    );
+        // IA Enemiga (Rojo) - Ahora incluye escoltas disparando
+        const enemyFireChance = state.speed > 15 ? 0.12 : 0.06;
+        if (Math.random() < enemyFireChance && time - state.lastFireTime > 0.10) {
+            
+            // Decidimos si dispara un escolta (80% de probabilidad) o la Estrella de la Muerte
+            const isEscortShot = Math.random() > 0.2;
+            
+            if (isEscortShot) {
+                // Elegimos un caza de escolta al azar (0 a 23)
+                const escortIndex = Math.floor(Math.random() * 24);
+                models.spawnEnemyLaser(escortIndex);
+            } else {
+                // Disparo desde la Estrella de la Muerte (posicionamiento aleatorio en su radio)
+                models.spawnEnemyLaser(null);
+            }
+            
+            // Destello rojo en cabina para impacto visual
+            if (Math.random() > 0.7) {
+                lights.triggerCombatFlash(0xff0000); 
+            }
+            state.lastFireTime = time;
+        }
 
-    scene.add(tierra);
-
-
-    // Moon
-    const moonTexture = new THREE.TextureLoader().load('assets/images/moon.jpg');
-    const normalTexture = new THREE.TextureLoader().load('assets/images/normal.jpg');
-
-    const moon = new THREE.Mesh(
-        new THREE.SphereGeometry(2, 32, 32),
-        new THREE.MeshStandardMaterial({
-            map: moonTexture,
-            normalMap: normalTexture,
-        })
-    );
-
-    scene.add(moon);
-
-    moon.position.z = 35;
-    moon.position.setX(-10);
-
-
-    // Scroll Animation
-    function moveCamera() {
-        const t = document.body.getBoundingClientRect().top;
-        moon.rotation.x += 0.003;
-        moon.rotation.y += 0.009;
-
-        tierra.rotation.x += 0.0008;
-        tierra.rotation.y += 0.0025;
-
-        camera.position.z = t * -0.01;
-        camera.position.x = t * -0.0002;
-        camera.rotation.y = t * -0.0002;
-    }
-
-    document.body.onscroll = moveCamera;
-    moveCamera();
-
-
-    // Animation Loop
-    function animate() {
-        requestAnimationFrame(animate);
-
-        tierra.rotation.x += 0.0001;
-        tierra.rotation.y += 0.0007;
-
-        moon.rotation.x += 0.001;
-        moon.rotation.y += 0.005;
-
-        // controls.update();
-        render();
+        // 5. ACTUALIZACIÓN DE MODELOS (Naves y Proyectiles)
+        models.update(time, delta); 
     }
 
-    animate();
+    // 6. SUBSISTEMAS VISUALES
+    stars.update(state.speed);
+    lights.update(time, state.speed);
+    sm.updateVisuals(state.speed); // Actualización de Bloom y Post-proceso según velocidad
 
-    window.addEventListener('resize', onWindowResize);
+    // 7. DINÁMICA DE CÁMARA
+    camera.position.x = state.smoothMouse.x * 0.15;
+    camera.position.y = -state.smoothMouse.y * 0.05;
+    
+    const cameraRoll = -state.smoothMouse.x * 0.15;
+    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, cameraRoll, 0.06);
 
-
-    function render() {
-        renderer.render(scene, camera);
+    // 8. VIBRACIÓN Y FOV
+    if (state.speed > 10) {
+        const shake = Math.pow((state.speed - 10) / 15, 2) * 0.07;
+        camera.position.x += (Math.random() - 0.5) * shake;
+        camera.position.y += (Math.random() - 0.5) * shake;
     }
 
-
-    function onWindowResize() {
-
-        camera.aspect = window.innerWidth / window.innerHeight;
+    const targetFOV = 70 + (state.speed * 1.2);
+    if (Math.abs(camera.fov - targetFOV) > 0.1) {
+        camera.fov = THREE.MathUtils.lerp(camera.fov, targetFOV, 0.08);
         camera.updateProjectionMatrix();
-
-        renderer.setSize(window.innerWidth, window.innerHeight);
-
-        render();
     }
-}
+});
