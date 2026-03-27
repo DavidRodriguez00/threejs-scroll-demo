@@ -25,7 +25,7 @@ export class CollisionSystem {
         if (!lasers || lasers.length === 0) return;
 
         // Lotes de enemigos vulnerables definidos en Models.js
-        const batches = [this.models.escolts, this.models.interceptors];
+        const batches = [this.models.escorts, this.models.escolts, this.models.interceptors];
 
         // Iteramos los láseres (hacia atrás para eliminar del array de forma segura)
         for (let i = lasers.length - 1; i >= 0; i--) {
@@ -50,7 +50,8 @@ export class CollisionSystem {
 
                     // 2. Extraer posición mundial real
                     this._worldPos.setFromMatrixPosition(this._tempMatrix);
-                    this._worldPos.applyMatrix4(this.models.escoltGroup.matrixWorld);
+                    const group = batch === this.models.escorts ? this.models.escortGroup : this.models.escoltGroup;
+                    this._worldPos.applyMatrix4(group.matrixWorld);
 
                     // 3. Chequeo de distancia (Esfera de colisión)
                     const dist = l.pos.distanceTo(this._worldPos);

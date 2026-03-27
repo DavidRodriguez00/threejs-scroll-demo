@@ -44,10 +44,10 @@ export class ModelLoader {
     /**
      * Carga un lote de naves con parámetros de comportamiento específicos.
      * @param {number} count Cantidad de naves.
-     * @param {string} type 'escolt' o 'interceptor'.
+     * @param {string} type 'escort' o 'interceptor'.
      */
-    async loadEscolts(count = 12, type = 'escolt') {
-        const gltf = await this.loader.loadAsync('caza.glb');
+    async loadEscorts(count = 12, type = 'escort') {
+        const gltf = await this.loader.loadAsync('imperial.glb');
 
         let sourceMesh;
         gltf.scene.traverse(n => { if (n.isMesh && !sourceMesh) sourceMesh = n; });
@@ -56,7 +56,7 @@ export class ModelLoader {
 
         // Diferenciación visual: Interceptores con un toque más oscuro y motores rojos
         if (type === 'interceptor') {
-            // realisticMaterial.color.setHex(0x888888);
+            realisticMaterial.color.setHex(0x888888);
             realisticMaterial.emissive.setHex(0xff0000);
             realisticMaterial.emissiveIntensity = 2;
         }
@@ -67,7 +67,7 @@ export class ModelLoader {
         for (let i = 0; i < count; i++) {
             // Configuración por defecto (Escoltas)
             let config = {
-                spread: { x: 3500, y: 2500, z: 3000 },
+                spread: { x: 2500, y: 1500, z: -2000 },
                 speed: [0.8, 1.5],
                 fireRate: [1.5, 3.5]
             };
@@ -75,7 +75,7 @@ export class ModelLoader {
             // Configuración de Interceptores (Más lejos, más rápidos, más agresivos)
             if (type === 'interceptor') {
                 config = {
-                    spread: { x: 200, y: 100, z: 1000 },
+                    spread: { x: 4000, y: 2000, z: -4000 },
                     speed: [2.5, 4.0],
                     fireRate: [0.5, 1.2]
                 };
@@ -100,4 +100,66 @@ export class ModelLoader {
         instanced.castShadow = true;
         return { mesh: instanced, data };
     }
+
+
+    /**
+     * Carga un lote de naves con parámetros de comportamiento específicos.
+     * @param {number} count Cantidad de naves.
+     * @param {string} type 'escort' o 'interceptor'.
+     */
+    async loadEscolts(count = 12, type = 'escort') {
+        const gltf = await this.loader.loadAsync('caza.glb');
+
+        let sourceMesh;
+        gltf.scene.traverse(n => { if (n.isMesh && !sourceMesh) sourceMesh = n; });
+
+        const realisticMaterial = sourceMesh.material.clone();
+
+        // Diferenciación visual: Interceptores con un toque más oscuro y motores rojos
+        if (type === 'interceptor') {
+            realisticMaterial.color.setHex(0x888888);
+            realisticMaterial.emissive.setHex(0xff0000);
+            realisticMaterial.emissiveIntensity = 2;
+        }
+
+        const instanced = new THREE.InstancedMesh(sourceMesh.geometry, realisticMaterial, count);
+        const data = [];
+
+        for (let i = 0; i < count; i++) {
+            // Configuración por defecto (Escoltas)
+            let config = {
+                spread: { x: 2500, y: 1500, z: -2000 },
+                speed: [0.8, 1.5],
+                fireRate: [1.5, 3.5]
+            };
+
+            // Configuración de Interceptores (Más lejos, más rápidos, más agresivos)
+            if (type === 'interceptor') {
+                config = {
+                    spread: { x: 4000, y: 2000, z: -4000 },
+                    speed: [2.5, 4.0],
+                    fireRate: [0.5, 1.2]
+                };
+            }
+
+            const x = (Math.random() - 0.5) * config.spread.x;
+            const y = (Math.random() - 0.5) * config.spread.y;
+            const z = config.spread.z - (Math.random() * 2000);
+
+            data.push({
+                basePos: new THREE.Vector3(x, y, z),
+                phase: Math.random() * Math.PI * 2,
+                speed: config.speed[0] + Math.random() * config.speed[1],
+                amplitude: 150 + Math.random() * 200,
+                fireCooldown: Math.random() * 2,
+                fireRate: config.fireRate[0] + Math.random() * config.fireRate[1],
+                isDead: false,
+                type: type
+            });
+        }
+
+        instanced.castShadow = true;
+        return { mesh: instanced, data };
+    }
+
 }
