@@ -31,14 +31,14 @@ export class CombatSystem {
         const chance = this.state.speed > 15 ? 0.2 : 0.08;
 
         if (Math.random() < chance && time - this.state.lastFireTime > 0.15) {
-            const escorts = this.models.escorts.escortData;
+            const escolts = this.models.escolts.escortData;
 
-            if (escorts && escorts.length > 0) {
-                const idx = Math.floor(Math.random() * escorts.length);
-                const data = escorts[idx];
+            if (escolts && escolts.length > 0) {
+                const idx = Math.floor(Math.random() * escolts.length);
+                const data = escolts[idx];
 
                 if (!data.isDead) {
-                    this.models.escorts.instancedMesh.getMatrixAt(idx, this._tempMatrix);
+                    this.models.escolts.instancedMesh.getMatrixAt(idx, this._tempMatrix);
                     this._tempWorldPos.setFromMatrixPosition(this._tempMatrix);
                     this._tempWorldPos.applyMatrix4(this.models.escortGroup.matrixWorld);
 

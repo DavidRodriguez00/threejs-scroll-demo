@@ -42,49 +42,62 @@ export class ModelLoader {
     }
 
     /**
-     * Carga escoltas con lógica de movimiento individualizada para el EscortSystem.
+     * Carga un lote de naves con parámetros de comportamiento específicos.
+     * @param {number} count Cantidad de naves.
+     * @param {string} type 'escort' o 'interceptor'.
      */
-    async loadEscorts(count = 12) {
+    async loadEscolts(count = 12, type = 'escort') {
         const gltf = await this.loader.loadAsync('caza.glb');
 
         let sourceMesh;
         gltf.scene.traverse(n => { if (n.isMesh && !sourceMesh) sourceMesh = n; });
-        if (!sourceMesh) throw new Error("No se encontró mesh en caza.glb");
 
-        // Material PBR balanceado para que reaccione bien a las luces pero mantenga identidad
         const realisticMaterial = sourceMesh.material.clone();
-        realisticMaterial.roughness = 0.2;
-        realisticMaterial.metalness = 0.8;
-        realisticMaterial.envMapIntensity = 2.5;
+
+        // Diferenciación visual: Interceptores con un toque más oscuro y motores rojos
+        if (type === 'interceptor') {
+            // realisticMaterial.color.setHex(0x888888);
+            realisticMaterial.emissive.setHex(0xff0000);
+            realisticMaterial.emissiveIntensity = 2;
+        }
 
         const instanced = new THREE.InstancedMesh(sourceMesh.geometry, realisticMaterial, count);
-
         const data = [];
+
         for (let i = 0; i < count; i++) {
-            // Distribución espacial en un frustum simulado delante de la Death Star
-            const x = (Math.random() - 0.5) * 2500;
-            const y = (Math.random() - 0.5) * 1500;
-            // Posicionamiento escalonado en profundidad
-            const z = -2000 - (Math.random() * 2000);
+            // Configuración por defecto (Escoltas)
+            let config = {
+                spread: { x: 3500, y: 2500, z: 3000 },
+                speed: [0.8, 1.5],
+                fireRate: [1.5, 3.5]
+            };
+
+            // Configuración de Interceptores (Más lejos, más rápidos, más agresivos)
+            if (type === 'interceptor') {
+                config = {
+                    spread: { x: 200, y: 100, z: 1000 },
+                    speed: [2.5, 4.0],
+                    fireRate: [0.5, 1.2]
+                };
+            }
+
+            const x = (Math.random() - 0.5) * config.spread.x;
+            const y = (Math.random() - 0.5) * config.spread.y;
+            const z = config.spread.z - (Math.random() * 2000);
 
             data.push({
                 basePos: new THREE.Vector3(x, y, z),
-                // Parámetros de movimiento orgánico:
                 phase: Math.random() * Math.PI * 2,
-                speed: 0.8 + Math.random() * 1.5, // Velocidades variadas para romper la monotonía
-                amplitude: 150 + Math.random() * 150, // Radio de patrulla individual
-
-                // Lógica de combate desincronizada
+                speed: config.speed[0] + Math.random() * config.speed[1],
+                amplitude: 150 + Math.random() * 200,
                 fireCooldown: Math.random() * 2,
-                fireRate: 1.5 + Math.random() * 2,
-                isDead: false
+                fireRate: config.fireRate[0] + Math.random() * config.fireRate[1],
+                isDead: false,
+                type: type
             });
         }
 
-        // Importante: habilitar sombras en las instancias si el hardware lo permite
         instanced.castShadow = true;
-        instanced.receiveShadow = true;
-
         return { mesh: instanced, data };
     }
 }

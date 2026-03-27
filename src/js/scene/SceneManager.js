@@ -6,7 +6,7 @@ import { RenderLoop } from './RenderLoop.js';
 export class SceneManager {
     constructor(canvas, state) { // Ahora recibe el estado global
         this.state = state;
-        
+
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x000105);
 
@@ -18,7 +18,7 @@ export class SceneManager {
         );
 
         this.rendererSystem = new RendererSystem(canvas);
-        
+
         // Post-procesado avanzado (Bloom + RGB Shift)
         this.post = new PostProcessing(
             this.rendererSystem.renderer,
@@ -59,7 +59,7 @@ export class SceneManager {
             // Desplazamiento aleatorio basado en la intensidad actual
             this.camera.position.x += (Math.random() - 0.5) * s;
             this.camera.position.y += (Math.random() - 0.5) * s;
-            
+
             // Reducción gradual del temblor (amortiguación)
             this.state.cameraShake = THREE.MathUtils.lerp(this.state.cameraShake, 0, 0.1);
         }
@@ -72,7 +72,8 @@ export class SceneManager {
     /**
      * Sincroniza la estética visual con la acción del juego.
      */
-    updateVisuals(speed, isFiring) {
+    updateVisuals(speed, isFiring = false) {
+        // Pasamos el renderer que vive en rendererSystem
         this.post.updateVisuals(speed, this.rendererSystem.renderer, isFiring);
     }
 
