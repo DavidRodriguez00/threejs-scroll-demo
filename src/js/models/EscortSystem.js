@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 
-export class EscortSystem {
+export class EscoltSystem {
     constructor(group, laserSystem) {
         this.group = group;
         this.lasers = laserSystem;
         this.instancedMesh = null;
-        this.escortData = [];
+        this.escoltData = [];
         this._dummy = new THREE.Object3D();
         this._worldPos = new THREE.Vector3();
 
@@ -16,7 +16,7 @@ export class EscortSystem {
 
     init({ mesh, data }) {
         this.instancedMesh = mesh;
-        this.escortData = data;
+        this.escoltData = data;
         this.instancedMesh.frustumCulled = false;
 
         // Inicializar histórico de posiciones para el cálculo de velocidad/rotación
@@ -28,9 +28,9 @@ export class EscortSystem {
     update(time, delta, playerPos = new THREE.Vector3(0, 0, 0)) {
         if (!this.instancedMesh) return;
 
-        // Dentro del bucle de actualización de EscortSystem.js
-        for (let i = 0; i < this.escortData.length; i++) {
-            const d = this.escortData[i];
+        // Dentro del bucle de actualización de EscoltSystem.js
+        for (let i = 0; i < this.escoltData.length; i++) {
+            const d = this.escoltData[i];
             const t = time * d.speed;
 
             // 1. Posición con "Lag" elástico (te siguen con inercia)

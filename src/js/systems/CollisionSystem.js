@@ -39,7 +39,7 @@ export class CollisionSystem {
             for (const batch of batches) {
                 if (!batch || !batch.instancedMesh) continue;
 
-                const data = batch.escortData;
+                const data = batch.escoltData;
                 for (let j = 0; j < data.length; j++) {
                     const enemy = data[j];
                     
@@ -50,7 +50,7 @@ export class CollisionSystem {
 
                     // 2. Extraer posición mundial real
                     this._worldPos.setFromMatrixPosition(this._tempMatrix);
-                    this._worldPos.applyMatrix4(this.models.escortGroup.matrixWorld);
+                    this._worldPos.applyMatrix4(this.models.escoltGroup.matrixWorld);
 
                     // 3. Chequeo de distancia (Esfera de colisión)
                     const dist = l.pos.distanceTo(this._worldPos);

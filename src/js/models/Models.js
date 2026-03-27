@@ -5,15 +5,15 @@ export class Models {
     constructor() {
         // Jerarquía de transformación: Group padre para movimiento global
         this.targetGroup = new THREE.Group();
-        this.escortGroup = new THREE.Group();
-        this.targetGroup.add(this.escortGroup);
+        this.escoltGroup = new THREE.Group();
+        this.targetGroup.add(this.escoltGroup);
 
         this.loader = new ModelLoader();
 
         // Lotes de naves (compatibles con CollisionSystem)
-        this.escorts = { instancedMesh: null, escortData: [] };
-        this.escolts = { instancedMesh: null, escortData: [] };
-        this.interceptors = { instancedMesh: null, escortData: [] };
+        this.escolts = { instancedMesh: null, escoltData: [] };
+        this.escolts = { instancedMesh: null, escoltData: [] };
+        this.interceptors = { instancedMesh: null, escoltData: [] };
 
         this.deathStar = null;
 
@@ -85,13 +85,13 @@ export class Models {
     }
 
 
-    async loadEscorts(count = 5) {
+    async loadEscolts(count = 5) {
         try {
             const gltf = await this.loader.loadAsync('caza.glb');
             let sourceMesh;
             gltf.scene.traverse(n => { if (n.isMesh && !sourceMesh) sourceMesh = n; });
 
-            this.instancedEscorts = new THREE.InstancedMesh(sourceMesh.geometry, sourceMesh.material, count);
+            this.instancedEscolts = new THREE.InstancedMesh(sourceMesh.geometry, sourceMesh.material, count);
 
             for (let i = 0; i < count; i++) {
                 const dist = 1200 + Math.random() * 500;
@@ -102,7 +102,7 @@ export class Models {
                 const y = dist * Math.sin(theta) * Math.sin(phi);
                 const z = dist * Math.cos(phi);
 
-                this.escortData.push({
+                this.escoltData.push({
                     basePos: new THREE.Vector3(x, y, z),
                     phase: Math.random() * Math.PI * 2,
                     speed: 0.15 + Math.random() * 0.2,
@@ -111,22 +111,22 @@ export class Models {
                     fireRate: 4 + Math.random() * 4 // Cadencia mucho más lenta (antes 1.5 - 3.5)
                 });
             }
-            this.escortGroup.add(this.instancedEscorts);
+            this.escoltGroup.add(this.instancedEscolts);
         } catch (e) { console.error("Error cargando escoltas:", e); }
     }
 
     async loadEscolts(count = 12) {
-        const result = await this.loader.loadEscolts(count, 'escort');
+        const result = await this.loader.loadEscolts(count, 'escolt');
         this.escolts.instancedMesh = result.mesh;
-        this.escolts.escortData = result.data;
-        this.escortGroup.add(this.escolts.instancedMesh);
+        this.escolts.escoltData = result.data;
+        this.escoltGroup.add(this.escolts.instancedMesh);
     }
 
     async loadInterceptors(count = 8) {
         const result = await this.loader.loadEscolts(count, 'interceptor');
         this.interceptors.instancedMesh = result.mesh;
-        this.interceptors.escortData = result.data;
-        this.escortGroup.add(this.interceptors.instancedMesh);
+        this.interceptors.escoltData = result.data;
+        this.escoltGroup.add(this.interceptors.instancedMesh);
     }
 
     /**
@@ -135,7 +135,7 @@ export class Models {
     update(time, delta, playerPos = new THREE.Vector3(0, 0, 0)) {
         this._updateBatch(this.escolts, time, delta, playerPos);
         this._updateBatch(this.interceptors, time, delta, playerPos);
-        this._updateEscorts(time, delta, playerPos);
+        this._updateEscolts(time, delta, playerPos);
         this._updateLasers(delta);
         this._updateParticles(delta);
     }
@@ -147,7 +147,7 @@ export class Models {
         const mesh = batch.instancedMesh;
         if (!mesh) return;
 
-        const data = batch.escortData;
+        const data = batch.escoltData;
 
         for (let i = 0; i < data.length; i++) {
             const d = data[i];
@@ -179,7 +179,7 @@ export class Models {
             d.fireCooldown -= delta;
             if (d.fireCooldown <= 0) {
                 this._tempV3.setFromMatrixPosition(this._dummy.matrix);
-                this._tempV3.applyMatrix4(this.escortGroup.matrixWorld);
+                this._tempV3.applyMatrix4(this.escoltGroup.matrixWorld);
                 this.spawnEnemyLaser(this._tempV3, playerPos);
                 d.fireCooldown = d.fireRate;
             }
@@ -188,11 +188,11 @@ export class Models {
     }
 
 
-    _updateEscorts(time, delta, playerPos) {
-        if (!this.instancedEscorts) return;
+    _updateEscolts(time, delta, playerPos) {
+        if (!this.instancedEscolts) return;
 
-        for (let i = 0; i < this.escortData.length; i++) {
-            const data = this.escortData[i];
+        for (let i = 0; i < this.escoltData.length; i++) {
+            const data = this.escoltData[i];
             const t = time * data.speed;
 
             this._dummy.position.set(
@@ -205,19 +205,19 @@ export class Models {
 
             this._dummy.scale.setScalar(500);
             this._dummy.updateMatrix();
-            this.instancedEscorts.setMatrixAt(i, this._dummy.matrix);
+            this.instancedEscolts.setMatrixAt(i, this._dummy.matrix);
 
             data.fireCooldown -= delta;
             if (data.fireCooldown <= 0) {
                 const worldPos = new THREE.Vector3();
                 worldPos.setFromMatrixPosition(this._dummy.matrix);
-                worldPos.applyMatrix4(this.escortGroup.matrixWorld);
+                worldPos.applyMatrix4(this.escoltGroup.matrixWorld);
 
                 this.spawnEnemyLaser(worldPos, playerPos);
                 data.fireCooldown = data.fireRate;
             }
         }
-        this.instancedEscorts.instanceMatrix.needsUpdate = true;
+        this.instancedEscolts.instanceMatrix.needsUpdate = true;
     }
 
 

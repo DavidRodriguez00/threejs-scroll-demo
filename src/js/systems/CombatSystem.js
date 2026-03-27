@@ -31,7 +31,7 @@ export class CombatSystem {
         const chance = this.state.speed > 15 ? 0.2 : 0.08;
 
         if (Math.random() < chance && time - this.state.lastFireTime > 0.15) {
-            const escolts = this.models.escolts.escortData;
+            const escolts = this.models.escolts.escoltData;
 
             if (escolts && escolts.length > 0) {
                 const idx = Math.floor(Math.random() * escolts.length);
@@ -40,7 +40,7 @@ export class CombatSystem {
                 if (!data.isDead) {
                     this.models.escolts.instancedMesh.getMatrixAt(idx, this._tempMatrix);
                     this._tempWorldPos.setFromMatrixPosition(this._tempMatrix);
-                    this._tempWorldPos.applyMatrix4(this.models.escortGroup.matrixWorld);
+                    this._tempWorldPos.applyMatrix4(this.models.escoltGroup.matrixWorld);
 
                     // MEJORA: Predicción de tiro sutil
                     // En lugar de disparar a donde ESTÁ el jugador, disparan a donde ESTARÁ

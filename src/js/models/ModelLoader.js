@@ -44,9 +44,9 @@ export class ModelLoader {
     /**
      * Carga un lote de naves con parámetros de comportamiento específicos.
      * @param {number} count Cantidad de naves.
-     * @param {string} type 'escort' o 'interceptor'.
+     * @param {string} type 'escolt' o 'interceptor'.
      */
-    async loadEscolts(count = 12, type = 'escort') {
+    async loadEscolts(count = 12, type = 'escolt') {
         const gltf = await this.loader.loadAsync('caza.glb');
 
         let sourceMesh;
