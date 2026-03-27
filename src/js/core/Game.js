@@ -64,8 +64,9 @@ export class Game {
         // Carga de la Estrella de la Muerte y naves enemigas en paralelo
         await Promise.all([
             this.models.loadDeathStar(this.sm.scene),
-            this.models.loadEscolts(10),      // Flota de escolta (TIE Fighters)
-            this.models.loadInterceptors(5)   // Flota de interceptores (TIE Interceptors)
+            this.models.loadEscorts(5),      // Flota de escolta (TIE Fighters)
+            this.models.loadEscolts(5),      // Flota de escolta (TIE Fighters)
+            this.models.loadInterceptors(7)   // Flota de interceptores (TIE Interceptors)
         ]);
 
         this.state.isLoaded = true;

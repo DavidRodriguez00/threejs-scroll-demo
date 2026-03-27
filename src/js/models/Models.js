@@ -11,6 +11,7 @@ export class Models {
         this.loader = new ModelLoader();
 
         // Lotes de naves (compatibles con CollisionSystem)
+        this.escorts = { instancedMesh: null, escortData: [] };
         this.escolts = { instancedMesh: null, escortData: [] };
         this.interceptors = { instancedMesh: null, escortData: [] };
 
@@ -20,7 +21,7 @@ export class Models {
         this.enemyLasers = null;
         this.playerLasers = null;
         this.laserData = [];
-        this.maxPool = 300; 
+        this.maxPool = 300;
 
         // --- SISTEMA DE EXPLOSIONES (PARTÍCULAS) ---
         this.maxParticles = 1000;
@@ -65,7 +66,7 @@ export class Models {
             blending: THREE.AdditiveBlending,
             transparent: true,
             depthWrite: false,
-            toneMapped: false 
+            toneMapped: false
         });
 
         this.particles = new THREE.Points(pGeom, pMat);
@@ -81,6 +82,37 @@ export class Models {
     async loadDeathStar(scene) {
         scene.add(this.targetGroup);
         this.deathStar = await this.loader.loadDeathStar(scene, this.targetGroup);
+    }
+
+
+    async loadEscorts(count = 5) {
+        try {
+            const gltf = await this.loader.loadAsync('caza.glb');
+            let sourceMesh;
+            gltf.scene.traverse(n => { if (n.isMesh && !sourceMesh) sourceMesh = n; });
+
+            this.instancedEscorts = new THREE.InstancedMesh(sourceMesh.geometry, sourceMesh.material, count);
+
+            for (let i = 0; i < count; i++) {
+                const dist = 1200 + Math.random() * 500;
+                const phi = Math.acos(-1 + (2 * i) / count);
+                const theta = Math.sqrt(count * Math.PI) * phi;
+
+                const x = dist * Math.cos(theta) * Math.sin(phi);
+                const y = dist * Math.sin(theta) * Math.sin(phi);
+                const z = dist * Math.cos(phi);
+
+                this.escortData.push({
+                    basePos: new THREE.Vector3(x, y, z),
+                    phase: Math.random() * Math.PI * 2,
+                    speed: 0.15 + Math.random() * 0.2,
+                    amplitude: 150 + Math.random() * 100,
+                    fireCooldown: 2 + Math.random() * 5,
+                    fireRate: 4 + Math.random() * 4 // Cadencia mucho más lenta (antes 1.5 - 3.5)
+                });
+            }
+            this.escortGroup.add(this.instancedEscorts);
+        } catch (e) { console.error("Error cargando escoltas:", e); }
     }
 
     async loadEscolts(count = 12) {
@@ -103,6 +135,7 @@ export class Models {
     update(time, delta, playerPos = new THREE.Vector3(0, 0, 0)) {
         this._updateBatch(this.escolts, time, delta, playerPos);
         this._updateBatch(this.interceptors, time, delta, playerPos);
+        this._updateEscorts(time, delta, playerPos);
         this._updateLasers(delta);
         this._updateParticles(delta);
     }
@@ -153,6 +186,40 @@ export class Models {
         }
         mesh.instanceMatrix.needsUpdate = true;
     }
+
+
+    _updateEscorts(time, delta, playerPos) {
+        if (!this.instancedEscorts) return;
+
+        for (let i = 0; i < this.escortData.length; i++) {
+            const data = this.escortData[i];
+            const t = time * data.speed;
+
+            this._dummy.position.set(
+                data.basePos.x + Math.sin(t + data.phase) * data.amplitude,
+                data.basePos.y + Math.cos(t * 0.7 + data.phase) * data.amplitude,
+                data.basePos.z + Math.sin(t * 0.4) * (data.amplitude * 0.3)
+            );
+
+            this._dummy.lookAt(this._dummy.position.x, this._dummy.position.y, 10000);
+
+            this._dummy.scale.setScalar(500);
+            this._dummy.updateMatrix();
+            this.instancedEscorts.setMatrixAt(i, this._dummy.matrix);
+
+            data.fireCooldown -= delta;
+            if (data.fireCooldown <= 0) {
+                const worldPos = new THREE.Vector3();
+                worldPos.setFromMatrixPosition(this._dummy.matrix);
+                worldPos.applyMatrix4(this.escortGroup.matrixWorld);
+
+                this.spawnEnemyLaser(worldPos, playerPos);
+                data.fireCooldown = data.fireRate;
+            }
+        }
+        this.instancedEscorts.instanceMatrix.needsUpdate = true;
+    }
+
 
     /**
      * Genera un estallido de partículas en una posición global
