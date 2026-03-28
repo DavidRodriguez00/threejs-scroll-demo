@@ -5,7 +5,9 @@ RectAreaLightUniformsLib.init();
 
 export class Lights {
     constructor(scene, cockpitGroup, config = {}) {
-        if (!scene || !cockpitGroup) throw new Error("Lights requiere 'scene' y 'cockpitGroup'.");
+        if (!scene || !cockpitGroup) {
+            throw new Error("Lights requiere 'scene' y 'cockpitGroup'.");
+        }
 
         this.scene = scene;
         this.cockpitGroup = cockpitGroup;
@@ -13,12 +15,12 @@ export class Lights {
         this.cfg = {
             sunIntensity: 4.5,
             ambientIntensity: 0.4,
-            maxFlyByLights: 3, // Máximo de disparos iluminando simultáneamente
+            maxFlyByLights: 3,
             ...config
         };
 
         this._time = 0;
-        this.flyByLights = []; // Pool de luces para disparos externos
+        this.flyByLights = [];
 
         this._initLights();
     }
@@ -28,60 +30,61 @@ export class Lights {
         this._createAmbient();
         this._createCockpitLights();
         this._createEffects();
-        this._createFlyByPool(); // Inicializar luces de ráfaga
+        this._createFlyByPool();
     }
 
-    // --- NUEVO: POOL DE LUCES PARA DISPAROS EXTERNOS ---
+    // ---------- FLYBY POOL ----------
     _createFlyByPool() {
-        for (let i = 0; i < this.cfg.maxFlyByLights; i++) {
+        const { maxFlyByLights } = this.cfg;
+
+        for (let i = 0; i < maxFlyByLights; i++) {
             const light = new THREE.PointLight(0x00ff00, 0, 30, 2);
-            // Las posicionamos detrás de la cabina inicialmente
             light.position.set(0, 0, 0);
             this.cockpitGroup.add(light);
 
             this.flyByLights.push({
-                light: light,
+                light,
                 active: false,
-                speed: 0,
-                color: new THREE.Color()
+                speed: 0
             });
         }
     }
 
-    /**
-     * Activa una luz que recorre la cabina de atrás hacia adelante
-     * @param {number} color - Hexadecimal (0x00ff00 verde, 0x00aaff azul)
-     */
     triggerFlyBy(color = 0x00ff00) {
         const fbl = this.flyByLights.find(l => !l.active);
         if (!fbl) return;
 
+        const rand = Math.random;
+
         fbl.active = true;
         fbl.light.color.setHex(color);
-        fbl.light.intensity = 40 + Math.random() * 40; // Destello HDR
+        fbl.light.intensity = 40 + rand() * 40;
 
-        // Aparece detrás en una posición X/Y aleatoria cerca del fuselaje
         fbl.light.position.set(
-            (Math.random() - 0.5) * 10,
-            (Math.random() - 0.5) * 8,
+            (rand() - 0.5) * 10,
+            (rand() - 0.5) * 8,
             -10
         );
-        fbl.speed = 100 + Math.random() * 50; // Velocidad del proyectil
+
+        fbl.speed = 100 + rand() * 50;
     }
 
-    // --- MÉTODOS EXISTENTES (Actualizados) ---
+    // ---------- LIGHT CREATION ----------
 
     _createSun() {
-        this.sun = new THREE.DirectionalLight(0xffffff, this.cfg.sunIntensity);
-        this.sun.position.set(1200, 1600, 1000);
-        this.sun.castShadow = true;
-        this.sun.shadow.mapSize.set(2048, 2048); // Balance rendimiento/calidad
-        this.scene.add(this.sun);
+        const sun = new THREE.DirectionalLight(0xffffff, this.cfg.sunIntensity);
+        sun.position.set(1200, 1600, 1000);
+        sun.castShadow = true;
+        sun.shadow.mapSize.set(2048, 2048);
+
+        this.scene.add(sun);
+        this.sun = sun;
     }
 
     _createAmbient() {
-        this.ambient = new THREE.HemisphereLight(0x0a0a15, 0x000000, this.cfg.ambientIntensity);
-        this.scene.add(this.ambient);
+        const ambient = new THREE.HemisphereLight(0x0a0a15, 0x000000, this.cfg.ambientIntensity);
+        this.scene.add(ambient);
+        this.ambient = ambient;
     }
 
     _createCockpitLights() {
@@ -93,16 +96,24 @@ export class Lights {
 
         this.alarmLeft = new THREE.PointLight(0xff0000, 0, 15);
         this.alarmRight = new THREE.PointLight(0xff0000, 0, 15);
+
         this.alarmLeft.position.set(-3, 1, 1);
         this.alarmRight.position.set(3, 1, 1);
 
-        this.cockpitGroup.add(this.bounceLight, this.engineGlow, this.alarmLeft, this.alarmRight);
+        this.cockpitGroup.add(
+            this.bounceLight,
+            this.engineGlow,
+            this.alarmLeft,
+            this.alarmRight
+        );
     }
 
     _createEffects() {
         this.combatFlash = new THREE.PointLight(0xffffff, 0, 100);
         this.combatFlash.position.set(0, 1.5, 2.0);
+
         this.shortCircuit = new THREE.PointLight(0xffffff, 0, 8);
+
         this.cockpitGroup.add(this.combatFlash, this.shortCircuit);
     }
 
@@ -111,56 +122,65 @@ export class Lights {
         this.combatFlash.intensity = power;
     }
 
+    // ---------- UPDATE ----------
+
     update(delta, speed) {
         this._time += delta;
 
-        // Generamos valores de oscilación sutil
-        // Usamos frecuencias distintas (0.8 y 0.5) para que el movimiento sea irregular (natural)
-        this.oscillation = {
-            x: Math.sin(this._time * 0.8) * 0.015,
-            y: Math.cos(this._time * 0.5) * 0.015,
-            roll: Math.sin(this._time * 0.3) * 0.005
-        };
+        // Oscilación (sin crear objeto nuevo cada frame)
+        this.oscillationX = Math.sin(this._time * 0.8) * 0.015;
+        this.oscillationY = Math.cos(this._time * 0.5) * 0.015;
+        this.oscillationRoll = Math.sin(this._time * 0.3) * 0.005;
 
         this._updateCombatFlash(delta);
         this._updateEngine(speed);
         this._updateState(speed);
-        this._updateFlyBy(delta); // Actualizar los disparos que pasan
+        this._updateFlyBy(delta);
     }
 
     _updateFlyBy(delta) {
-        this.flyByLights.forEach(fbl => {
-            if (!fbl.active) return;
+        for (let i = 0; i < this.flyByLights.length; i++) {
+            const fbl = this.flyByLights[i];
+            if (!fbl.active) continue;
 
-            // Mover la luz de atrás hacia adelante (Z aumenta)
-            fbl.light.position.z += fbl.speed * delta;
+            const light = fbl.light;
 
-            // Decaimiento natural de intensidad
-            fbl.light.intensity *= 0.92;
+            light.position.z += fbl.speed * delta;
+            light.intensity *= 0.92;
 
-            // Desactivar cuando ya pasó la cabina o se apagó
-            if (fbl.light.position.z > 15 || fbl.light.intensity < 0.1) {
+            if (light.position.z > 15 || light.intensity < 0.1) {
                 fbl.active = false;
-                fbl.light.intensity = 0;
+                light.intensity = 0;
             }
-        });
+        }
     }
 
     _updateCombatFlash(delta) {
-        if (this.combatFlash.intensity <= 0) return;
-        this.combatFlash.intensity *= Math.exp(-12 * delta);
-        if (this.combatFlash.intensity < 0.05) this.combatFlash.intensity = 0;
+        const light = this.combatFlash;
+        if (light.intensity <= 0) return;
+
+        light.intensity *= Math.exp(-12 * delta);
+
+        if (light.intensity < 0.05) {
+            light.intensity = 0;
+        }
     }
 
     _updateEngine(speed) {
         const target = speed > 10 ? (speed - 10) * 2 : 0.5;
-        this.engineGlow.intensity = THREE.MathUtils.lerp(this.engineGlow.intensity, target, 0.1);
+
+        this.engineGlow.intensity = THREE.MathUtils.lerp(
+            this.engineGlow.intensity,
+            target,
+            0.1
+        );
     }
 
     _updateState(speed) {
-        // Lógica de alarmas simplificada para enfoque en disparos
         const inCombat = speed > 18;
-        this.alarmLeft.intensity = THREE.MathUtils.lerp(this.alarmLeft.intensity, inCombat ? 5 : 0, 0.1);
-        this.alarmRight.intensity = THREE.MathUtils.lerp(this.alarmRight.intensity, inCombat ? 5 : 0, 0.1);
+        const target = inCombat ? 5 : 0;
+
+        this.alarmLeft.intensity = THREE.MathUtils.lerp(this.alarmLeft.intensity, target, 0.1);
+        this.alarmRight.intensity = THREE.MathUtils.lerp(this.alarmRight.intensity, target, 0.1);
     }
 }

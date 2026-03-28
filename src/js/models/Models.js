@@ -337,6 +337,10 @@ export class Models {
 
     _updateLasers(delta) {
         let eIdx = 0, pIdx = 0;
+        
+        // Usamos una posición lejana para las instancias inactivas
+        const outOfView = new THREE.Vector3(99999, 99999, 99999);
+
         for (let i = this.laserData.length - 1; i >= 0; i--) {
             const l = this.laserData[i];
             l.pos.addScaledVector(l.dir, l.speed * delta);
@@ -347,9 +351,11 @@ export class Models {
                 continue;
             }
 
+            // Configurar el dummy para el láser activo
             this._dummy.position.copy(l.pos);
             this._dummy.lookAt(this._tempV3.copy(l.pos).add(l.dir));
-            this._dummy.scale.set(4, 4, 120);
+            // Escala: Z es el largo del haz
+            this._dummy.scale.set(10, 10, 300); 
             this._dummy.updateMatrix();
 
             if (l.type === 'enemy' && eIdx < this.maxPool) {
@@ -359,10 +365,17 @@ export class Models {
             }
         }
 
+        // IMPORTANTE: Limpiar las instancias restantes del pool
+        this._dummy.position.copy(outOfView);
         this._dummy.scale.setScalar(0);
         this._dummy.updateMatrix();
-        for (let i = eIdx; i < this.maxPool; i++) this.enemyLasers.setMatrixAt(i, this._dummy.matrix);
-        for (let i = pIdx; i < this.maxPool; i++) this.playerLasers.setMatrixAt(i, this._dummy.matrix);
+
+        for (let i = eIdx; i < this.maxPool; i++) {
+            this.enemyLasers.setMatrixAt(i, this._dummy.matrix);
+        }
+        for (let i = pIdx; i < this.maxPool; i++) {
+            this.playerLasers.setMatrixAt(i, this._dummy.matrix);
+        }
 
         this.enemyLasers.instanceMatrix.needsUpdate = true;
         this.playerLasers.instanceMatrix.needsUpdate = true;

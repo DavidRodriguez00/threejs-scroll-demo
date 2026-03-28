@@ -5,12 +5,12 @@ export class RenderLoop {
         this.renderer = renderer;
         this.composer = composer;
         this.camera = camera;
-        this.state = state; // Necesitamos acceso al GameState para leer el timeScale
+        this.state = state;
 
         this.clock = new THREE.Clock();
         this.updateCallback = null;
         
-        // Acumulador para el tiempo transcurrido "lógico"
+        // Tiempo lógico acumulado (afectado por el timeScale)
         this.logicalElapsed = 0;
     }
 
@@ -20,29 +20,35 @@ export class RenderLoop {
 
     start() {
         this.renderer.setAnimationLoop(() => {
-            // 1. OBTENER DELTA REAL
-            const realDelta = Math.min(this.clock.getDelta(), 0.1);
+            // 1. OBTENER DELTA REAL (Tiempo de CPU entre frames)
+            let realDelta = this.clock.getDelta();
+            
+            // Capar el delta para evitar saltos enormes si hay lag o cambio de pestaña
+            if (realDelta > 0.1) realDelta = 0.1;
 
-            // 2. APLICAR ESCALA TEMPORAL (Hitstop / Slow Motion)
-            // Si state.timeScale es 1.0, el tiempo corre normal.
-            // Si es 0.05, el juego casi se detiene pero el render sigue a 60+ FPS.
-            const timeScale = this.state.timeScale || 1.0;
+            // 2. APLICAR ESCALA TEMPORAL (Multiplicador de velocidad del juego)
+            // Aseguramos que nunca sea undefined o negativo
+            const timeScale = (this.state.timeScale !== undefined) ? this.state.timeScale : 1.0;
+            
+            // El Delta Escalado es lo que moverá las balas y naves
             const scaledDelta = realDelta * timeScale;
 
-            // 3. ACTUALIZAR TIEMPO LÓGICO ACUMULADO
-            // Usamos esto en lugar de clock.getElapsedTime() para que las 
-            // oscilaciones (senos/cosenos) también se ralenticen.
+            // 3. ACTUALIZAR TIEMPO LÓGICO
+            // Es vital usar esto en Models.js para que Math.sin(logicalElapsed) 
+            // se ralentice junto con el juego.
             this.logicalElapsed += scaledDelta;
 
             if (this.updateCallback) {
-                this.camera.updateWorldMatrix(true, false);
+                // Forzar actualización de matrices de cámara antes del frame
+                this.camera.updateMatrixWorld();
                 
-                // Pasamos el tiempo lógico y el delta escalado
+                // IMPORTANTE: Pasamos logicalElapsed para las funciones seno/coseno
+                // y scaledDelta para las velocidades (pos.addScaledVector)
                 this.updateCallback(this.logicalElapsed, scaledDelta, this.camera);
             }
 
             // 4. RENDERIZADO
-            // El renderizado siempre ocurre a máxima velocidad para suavidad visual
+            // El render siempre va a 60fps/144fps reales, independientemente del timeScale
             this.composer.render();
         });
     }

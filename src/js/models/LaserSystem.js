@@ -1,36 +1,41 @@
 import * as THREE from 'three';
 
 export class LaserSystem {
-    constructor(maxPool = 200) {
+    constructor(maxPool = 300) { // Subimos el pool para batallas masivas
         this.maxPool = maxPool;
         this.enemyLasers = null;
         this.playerLasers = null;
         this.laserData = [];
         this._dummy = new THREE.Object3D();
         this._tempV3 = new THREE.Vector3();
+        
+        // Posición de "reposo" para instancias no usadas
+        this._deadPos = new THREE.Vector3(0, 0, -99999);
     }
 
     init(scene) {
-        // Geometría afilada: más fina en la punta para efecto de proyectil
+        // Geometría low-poly para rendimiento extremo
         const geometry = new THREE.CylinderGeometry(0.2, 0.8, 1, 4); 
         geometry.rotateX(Math.PI / 2);
 
-        // MATERIAL BRUTAL: Combinación de Aditivo y No-Iluminación
         const createLaserMat = (color) => new THREE.MeshBasicMaterial({
             color: color,
             transparent: true,
-            opacity: 1,
-            blending: THREE.AdditiveBlending, // Suma colores: el cruce de láseres brilla más
-            depthWrite: false, // Optimiza render y evita bordes negros
-            toneMapped: false
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            toneMapped: false // Permite que el Bloom lo haga brillar
         });
 
         this.enemyLasers = new THREE.InstancedMesh(geometry, createLaserMat(0xff2222), this.maxPool);
         this.playerLasers = new THREE.InstancedMesh(geometry, createLaserMat(0x22ff22), this.maxPool);
 
-        // Prioridad de render máxima
+        // Aseguramos que se vean por encima de casi todo
         this.enemyLasers.renderOrder = 2000;
         this.playerLasers.renderOrder = 2000;
+        
+        // Evitamos que Three.js los oculte si el origen del mesh (0,0,0) sale de cámara
+        this.enemyLasers.frustumCulled = false;
+        this.playerLasers.frustumCulled = false;
 
         scene.add(this.enemyLasers, this.playerLasers);
     }
@@ -40,33 +45,50 @@ export class LaserSystem {
         const dir = new THREE.Vector3();
         camera.getWorldPosition(pos);
         camera.getWorldDirection(dir);
-        pos.addScaledVector(dir, 45);
+        
+        // Salida ligeramente adelantada al cockpit
+        pos.addScaledVector(dir, 50);
 
-        this.laserData.push({ pos: pos.clone(), dir: dir.clone(), life: 1.5, type: 'player' });
+        this.laserData.push({ 
+            pos: pos.clone(), 
+            dir: dir.clone(), 
+            life: 2.0, 
+            type: 'player',
+            speed: 18000 
+        });
     }
 
     spawnEnemyLaser(originPos, playerPos) {
         if (!originPos) return;
-        const origin = originPos.clone();
-        const target = playerPos ? playerPos.clone() : new THREE.Vector3(0, 0, 0);
-        const dir = new THREE.Vector3().subVectors(target, origin).normalize();
+        
+        const dir = new THREE.Vector3().subVectors(playerPos, originPos).normalize();
 
-        // Dispersión sutil
-        const deviation = 0.03;
+        // Dispersión sutil fija (determinista si quisieras, pero aquí es aleatoria)
+        const deviation = 0.04;
         dir.x += (Math.random() - 0.5) * deviation;
         dir.y += (Math.random() - 0.5) * deviation;
         dir.normalize();
 
-        this.laserData.push({ pos: origin, dir: dir, life: 3.5, type: 'enemy' });
+        this.laserData.push({ 
+            pos: originPos.clone(), 
+            dir: dir, 
+            life: 4.0, 
+            type: 'enemy',
+            speed: 9500 
+        });
     }
 
+    /**
+     * @param {number} delta - Debe ser el scaledDelta de tu RenderLoop
+     */
     update(delta) {
         let eIdx = 0, pIdx = 0;
+
         for (let i = this.laserData.length - 1; i >= 0; i--) {
             const l = this.laserData[i];
-            const speed = l.type === 'player' ? 18000 : 11000;
-
-            l.pos.addScaledVector(l.dir, speed * delta);
+            
+            // Movimiento basado en tiempo lógico
+            l.pos.addScaledVector(l.dir, l.speed * delta);
             l.life -= delta;
 
             if (l.life <= 0) {
@@ -77,10 +99,11 @@ export class LaserSystem {
             this._dummy.position.copy(l.pos);
             this._dummy.lookAt(this._tempV3.copy(l.pos).add(l.dir));
             
-            // LONGITUD DINÁMICA: El láser se estira proporcionalmente a su velocidad
-            // Esto crea un "Motion Blur" natural que se ve increíble en movimiento
-            const stretch = speed * delta * 1.5; 
-            this._dummy.scale.set(4, 4, Math.max(100, stretch)); 
+            // EFECTO VISUAL: El estiramiento debe ignorar el delta del slow-mo
+            // para que los láseres no se vean "cortos" cuando el tiempo se ralentiza.
+            // Usamos un valor base + una escala visual constante.
+            const visualLength = l.type === 'player' ? 350 : 200;
+            this._dummy.scale.set(5, 5, visualLength); 
             this._dummy.updateMatrix();
 
             if (l.type === 'enemy' && eIdx < this.maxPool) {
@@ -90,8 +113,11 @@ export class LaserSystem {
             }
         }
 
+        // LIMPIEZA DE MATRICES (Instancias inactivas)
+        this._dummy.position.copy(this._deadPos);
         this._dummy.scale.setScalar(0);
         this._dummy.updateMatrix();
+
         for (let i = eIdx; i < this.maxPool; i++) this.enemyLasers.setMatrixAt(i, this._dummy.matrix);
         for (let i = pIdx; i < this.maxPool; i++) this.playerLasers.setMatrixAt(i, this._dummy.matrix);
 
