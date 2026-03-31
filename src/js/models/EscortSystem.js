@@ -1,74 +1,97 @@
-// import * as THREE from 'three';
+import * as THREE from 'three';
 
-// export class EscoltSystem {
-//     constructor(group, laserSystem) {
-//         this.group = group;
-//         this.lasers = laserSystem;
-//         this.instancedMesh = null;
-//         this.escoltData = [];
-//         this._dummy = new THREE.Object3D();
-//         this._worldPos = new THREE.Vector3();
+export class EscortSystem {
+    constructor(loader) {
+        this.loader = loader;
+        this.instancedMesh = null;
+        this.data = [];
+        this._onKill = () => {};
+    }
 
-//         // Vectores para cálculos de inercia sin crear objetos nuevos (GC Friendly)
-//         this._currentPos = new THREE.Vector3();
-//         this._lastPos = []; // Guardaremos la posición anterior de cada escolta
-//     }
+    init(scene) {
+        this.scene = scene;
+    }
 
-//     init({ mesh, data }) {
-//         this.instancedMesh = mesh;
-//         this.escoltData = data;
-//         this.instancedMesh.frustumCulled = false;
+    setOnKill(cb) { 
+        this._onKill = cb; 
+    }
 
-//         // Inicializar histórico de posiciones para el cálculo de velocidad/rotación
-//         this._lastPos = data.map(d => d.basePos.clone());
+    async load(group) {
+        // ✅ FIX aquí
+        const result = await this.loader.loadEscorts(5);
 
-//         this.group.add(this.instancedMesh);
-//     }
+        // 🛡️ Protección anti-crash
+        if (!result || !result.mesh) {
+            throw new Error('EscortSystem: loadEscorts devolvió undefined');
+        }
 
-//     update(time, delta, playerPos = new THREE.Vector3(0, 0, 0)) {
-//         if (!this.instancedMesh) return;
+        this.instancedMesh = result.mesh;
+        this.data = result.data;
 
-//         // Dentro del bucle de actualización de EscoltSystem.js
-//         for (let i = 0; i < this.escoltData.length; i++) {
-//             const d = this.escoltData[i];
-//             const t = time * d.speed;
+        group.add(this.instancedMesh);
+    }
 
-//             // 1. Posición con "Lag" elástico (te siguen con inercia)
-//             const targetX = d.basePos.x + Math.sin(t + d.phase) * d.amplitude + (playerPos.x * 0.15);
-//             const targetY = d.basePos.y + Math.cos(t * 0.8 + d.phase) * d.amplitude + (playerPos.y * 0.15);
+    update(time, delta, playerPos, laserSystem) {
+        if (!this.instancedMesh) return;
 
-//             // 2. Calculamos la dirección del movimiento para el Banking
-//             const nextPos = new THREE.Vector3(targetX, targetY, d.basePos.z + Math.sin(t * 0.5) * 100);
-//             const movementDir = nextPos.clone().sub(this._dummy.position);
+        const dummy = new THREE.Object3D();
 
-//             this._dummy.position.copy(nextPos);
+        for (let i = 0; i < this.data.length; i++) {
+            const d = this.data[i];
 
-//             // 3. BANKING BRUTAL: Roll basado en velocidad lateral
-//             const roll = -movementDir.x * 0.05;
-//             const pitch = movementDir.y * 0.02;
+            if (d.isDead) {
+                dummy.scale.setScalar(0);
+                dummy.updateMatrix();
+                this.instancedMesh.setMatrixAt(i, dummy.matrix);
+                continue;
+            }
 
-//             this._dummy.rotation.set(pitch, 0, roll);
+            const t = time * d.speed;
 
-//             // 4. Micro-vibración de motores
-//             const shake = Math.sin(time * 20 + d.phase) * 0.5;
-//             this._dummy.position.x += shake;
+            dummy.position.set(
+                d.basePos.x + Math.sin(t + d.phase) * d.amplitude,
+                d.basePos.y + Math.cos(t * 0.7 + d.phase) * d.amplitude,
+                d.basePos.z + Math.sin(t * 0.4) * (d.amplitude * 0.3)
+            );
 
-//             this._dummy.scale.setScalar(100);
-//             this._dummy.updateMatrix();
-//             this.instancedMesh.setMatrixAt(i, this._dummy.matrix);
+            dummy.lookAt(dummy.position.x, dummy.position.y, 10000);
+            dummy.scale.setScalar(500);
+            dummy.updateMatrix();
 
-//             // ... resto de lógica de disparo
+            this.instancedMesh.setMatrixAt(i, dummy.matrix);
 
+            // 🔫 Disparo
+            d.fireCooldown -= delta;
+            if (d.fireCooldown <= 0) {
+                const worldPos = new THREE.Vector3();
+                worldPos.setFromMatrixPosition(dummy.matrix);
+                worldPos.applyMatrix4(this.scene.matrixWorld);
 
-//             // 4. DISPARO INTELIGENTE
-//             d.fireCooldown -= delta;
-//             if (d.fireCooldown <= 0) {
-//                 this._worldPos.setFromMatrixPosition(this._dummy.matrix);
-//                 this._worldPos.applyMatrix4(this.group.matrixWorld);
-//                 this.lasers.spawnEnemyLaser(this._worldPos, playerPos);
-//                 d.fireCooldown = d.fireRate + Math.random() * 0.5;
-//             }
-//         }
-//         this.instancedMesh.instanceMatrix.needsUpdate = true;
-//     }
-// }
+                laserSystem.spawnEnemyLaser(worldPos, playerPos);
+
+                d.fireCooldown = d.fireRate;
+            }
+        }
+
+        this.instancedMesh.instanceMatrix.needsUpdate = true;
+    }
+
+    getWorldPosition(index) {
+        if (!this.instancedMesh || !this.data[index]) return null;
+
+        const dummy = new THREE.Object3D();
+        this.instancedMesh.getMatrixAt(index, dummy.matrix);
+
+        return new THREE.Vector3().setFromMatrixPosition(dummy.matrix);
+    }
+
+    kill(index) {
+        if (this.data[index]) {
+            this.data[index].isDead = true;
+
+            if (this._onKill) {
+                this._onKill(this.getWorldPosition(index));
+            }
+        }
+    }
+}

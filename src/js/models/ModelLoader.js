@@ -1,128 +1,129 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 export class ModelLoader {
     constructor() {
-        this.loader = new GLTFLoader().setPath('assets/models/');
+        this.loader = new GLTFLoader().setPath('/assets/models/');
     }
 
-    // Generador determinista: misma semilla = misma posición siempre
-    _seededRandom(seed) {
-        const x = Math.sin(seed) * 10000;
-        return x - Math.floor(x);
-    }
-
-    async loadShip(group) {
-        const gltf = await this.loader.loadAsync('aeronave.glb');
-        gltf.scene.rotation.y = Math.PI;
-        gltf.scene.traverse(n => {
-            if (n.isMesh) {
-                n.material.envMapIntensity = 1.5;
-                n.castShadow = true;
-                n.receiveShadow = true;
-            }
-        });
-        group.add(gltf.scene);
-        return gltf.scene;
-    }
-
-    async loadDeathStar(scene, targetGroup) {
-        scene.add(targetGroup);
-        const gltf = await this.loader.loadAsync('death_star.glb');
-        const ds = gltf.scene;
-        ds.scale.setScalar(30);
-        ds.position.set(0, 0, -5000);
-        ds.traverse(n => {
-            if (n.isMesh) {
-                n.material.roughness = 0.8;
-                n.material.metalness = 0.2;
-            }
-        });
-        targetGroup.add(ds);
-        return ds;
+    async loadGLTF(file) {
+        return await this.loader.loadAsync(file);
     }
 
     /**
-     * Naves IMPERIALES: Aparecen DETRÁS de los cazas (Retaguardia)
+     * =========================
+     * PLAYER SHIP
+     * =========================
      */
-    async loadEscorts(count = 12, type = 'escort') {
-        const gltf = await this.loader.loadAsync('imperial.glb');
-        let sourceMesh;
-        gltf.scene.traverse(n => { if (n.isMesh && !sourceMesh) sourceMesh = n; });
+    async loadShip(cockpitGroup) {
+        const gltf = await this.loadGLTF('playerShip.glb');
 
-        const instanced = new THREE.InstancedMesh(sourceMesh.geometry, sourceMesh.material.clone(), count);
+        const ship = gltf.scene;
+
+        ship.scale.setScalar(1);
+        ship.position.set(0, -50, -200);
+
+        cockpitGroup.add(ship);
+
+        return ship;
+    }
+
+    /**
+     * =========================
+     * BASE MESH HELPERS
+     * =========================
+     */
+    async getFirstMesh(gltf) {
+        let mesh;
+
+        gltf.scene.traverse(n => {
+            if (n.isMesh && !mesh) mesh = n;
+        });
+
+        if (!mesh) {
+            throw new Error('No mesh found in GLTF');
+        }
+
+        return mesh;
+    }
+
+    async getFighterMesh() {
+        const gltf = await this.loadGLTF('caza.glb');
+        return await this.getFirstMesh(gltf);
+    }
+
+    async getImperialMesh() {
+        const gltf = await this.loadGLTF('imperial.glb');
+        return await this.getFirstMesh(gltf);
+    }
+
+    /**
+     * =========================
+     * ESCORTS (Instanced)
+     * =========================
+     */
+    async loadEscorts(count = 5) {
+        const baseMesh = await this.getFighterMesh();
+
+        const instanced = new THREE.InstancedMesh(
+            baseMesh.geometry,
+            material,
+            count
+        );
+
         const data = [];
-        instanced.scale.setScalar(1.5); // Escala más pequeña para los escoltas
 
         for (let i = 0; i < count; i++) {
-            const sX = i + 0.1;
-            const sY = i + 0.2;
-            const sZ = i + 0.3;
-
-            const x = (this._seededRandom(sX) - 0.5) * 4000;
-            const y = (this._seededRandom(sY) - 0.5) * 2000;
-            // Profundidad máxima: entre 5000 y 7000
-            const z = 1000;
-
             data.push({
-                basePos: new THREE.Vector3(x, y, z),
-                phase: this._seededRandom(i) * Math.PI * 2,
-                speed: 0.1,
-                amplitude: 100, // Movimiento más pesado
-                fireCooldown: 5 + (this._seededRandom(i) * 50),
-                fireRate: 40
+                basePos: new THREE.Vector3(
+                    (Math.random() - 0.5) * 5000,
+                    (Math.random() - 0.5) * 2000,
+                    -Math.random() * 8000
+                ),
+                phase: Math.random() * Math.PI * 2,
+                amplitude: 200 + Math.random() * 300,
+                speed: 0.5 + Math.random(),
+                fireCooldown: Math.random() * 2,
+                fireRate: 1 + Math.random() * 2,
+                isDead: false
             });
         }
+
         return { mesh: instanced, data };
     }
 
     /**
-     * CAZAS e INTERCEPTORES: Vanguardia y centro
+     * =========================
+     * IMPERIALS (Instanced)
+     * =========================
      */
-    async loadEscolts(count = 12, type = 'escort') {
-        const gltf = await this.loader.loadAsync('caza.glb');
-        let sourceMesh;
-        gltf.scene.traverse(n => { if (n.isMesh && !sourceMesh) sourceMesh = n; });
+    async loadImperials(count = 6) {
+        const baseMesh = await this.getImperialMesh();
 
-        const material = sourceMesh.material.clone();
-        if (type === 'interceptor') {
-            material.emissive.setHex(0xff0000);
-            material.emissiveIntensity = 2;
-        }
+        const instanced = new THREE.InstancedMesh(
+            baseMesh.geometry,
+            baseMesh.material,
+            count
+        );
 
-        const instanced = new THREE.InstancedMesh(sourceMesh.geometry, material, count);
         const data = [];
 
-        instanced.scale.setScalar(0.5); // Cazas más pequeños que los escoltas
-
         for (let i = 0; i < count; i++) {
-            const sX = i + 1.5;
-            const sY = i + 2.5;
-            const sZ = i + 3.5;
-
-            const x = (this._seededRandom(sX) - 0.5) * 2500;
-            const y = (this._seededRandom(sY) - 0.5) * 3500;
-            let z = 0 + (this._seededRandom(sZ) * 4000); // Entre 1500 y 4500
-            
-            if (type === 'interceptor') {
-                // INTERCEPTORES: Rango medio (detrás de los escoltas)
-                
-                z = 2500 + (this._seededRandom(sZ) * 10000);
-            } 
-
             data.push({
-                basePos: new THREE.Vector3(x, y, z),
-                phase: this._seededRandom(i) * Math.PI * 2,
-                speed: type === 'interceptor' ? 2.5 : 0.8,
-                amplitude: 150,
-                fireCooldown: this._seededRandom(i) * 50,
-                fireRate: type === 'interceptor' ? 20 : 30,
-                isDead: false,
-                type: type
+                basePos: new THREE.Vector3(
+                    (Math.random() - 0.5) * 8000,
+                    (Math.random() - 0.5) * 3000,
+                    -Math.random() * 12000
+                ),
+                phase: Math.random() * Math.PI * 2,
+                amplitude: 300 + Math.random() * 400,
+                speed: 0.3 + Math.random() * 0.7,
+                fireCooldown: Math.random() * 3,
+                fireRate: 2 + Math.random() * 2,
+                isDead: false
             });
         }
 
-        instanced.castShadow = true;
         return { mesh: instanced, data };
     }
 }
